@@ -11,3 +11,6 @@ https://how5.cenaero.be/content/cs2-t106-lpt-cascades
 The clustering function is programmed based on:
 https://github.com/luohancfd/CFCFD-NG/blob/dev/lib/nm/source/fobject.hh &
 https://github.com/luohancfd/CFCFD-NG/blob/dev/lib/nm/source/fobject.cxx
+
+The actual blocking is resembled after the work of F. Wang, “Whole Aero-Engine
+Meshing and CFD Simulation,” 2013.

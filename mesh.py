@@ -107,10 +107,10 @@ xi, yi = interpolate.splev(np.linspace(0, 1, 10000), tck)
 # Blocking
 
 
-nbb = 120
+nbb = 60
 ninm = 10
-scut = 20
-ncut = 20
+scut = 10
+ncut = 10
 
 # helper
 
@@ -173,7 +173,7 @@ u_blade = roberts_clustering(nbb, 0.5, 1.01)
 u_ss = u_blade * 0.5
 u_ps = 0.5 + u_ss
 
-u = np.append(u_ss, u_ps)
+u = np.append(u_ss, u_ps[1:])
 
 x_blade, y_blade = interpolate.splev(u, tck)
 
@@ -227,10 +227,14 @@ x_per_lower = np.append(x_per_lower, x_per_lower_1)
 y_per_lower = np.insert(yc - 0.5 * pitch, 0, y_per_lower_0)
 y_per_lower = np.append(y_per_lower, y_per_lower_1)
 
-f_per_lower = interpolate.interp1d(x_per_lower, y_per_lower, kind='cubic')
+tck_per, u = interpolate.splprep([x_per_lower, y_per_lower], s=0)
+x_per_lower_plot, y_per_lower_plot = interpolate.splev(
+    np.linspace(0, 1), tck_per, ext=2)
+#f_per_lower = interpolate.interp1d(x_per_lower, y_per_lower, kind='cubic')
 
-x_per_lower_plot = np.linspace(x_per_lower[0], x_per_lower[-1])
-y_per_lower_plot = f_per_lower(x_per_lower_plot)
+# x_per_lower_plot = np.linspace(x_per_lower[0], x_per_lower[-1])
+# y_per_lower_plot = f_per_lower(x_per_lower_plot)
+
 
 plt.plot(x_per_lower, y_per_lower, 'ro')
 plt.plot(x_per_lower_plot, y_per_lower_plot, 'r')
@@ -263,8 +267,8 @@ plt.plot([x_inm_lower_end, x_inm_upper_end], [
 
 # exm block
 
-x_exm_lower_start = x_blade[nbb + ninm//2]
-y_exm_lower_start = y_blade[nbb + ninm//2]
+x_exm_lower_start = x_blade[nbb + ninm//2 - 1]
+y_exm_lower_start = y_blade[nbb + ninm//2 - 1]
 
 x_exm_lower_end = x_exm_lower_start + 0.007
 y_exm_lower_end = y_exm_lower_start - 0.025
@@ -284,22 +288,31 @@ plt.plot([x_exm_lower_end, x_exm_upper_end], [
 
 # inl block
 
-x_inl_1 = x_blade[-(ninm // 2) - 1 - scut]
-y_inl_1 = y_blade[-(ninm // 2) - 1 - scut]
+x_inl_1 = x_blade[-(ninm // 2) - scut]
+y_inl_1 = y_blade[-(ninm // 2) - scut]
 
 plt.plot([x_inl_1, x_per_lower_0], [y_inl_1, y_per_lower_0], 'r')
 plt.plot([x_inm_lower_end, x_per_lower_0], [
          y_inm_lower_end, y_per_lower_0], 'r')
 
 
-# print(u)
-
-
 # mesh creation
+
+def plot_block(X):
+    plt.plot(X[:, :, 0], X[:, :, 1], '.r')
+
+    for i in range(X.shape[0]):
+        plt.plot(X[i, :, 0], X[i, :, 1], '-b')
+
+    for j in range(X.shape[1]):
+        plt.plot(X[:, j, 0], X[:, j, 1], '-b')
+
 
 # TFI
 
 # Block inm
+
+
 iMax_inm = ninm + 1
 jMax_inm = ncut
 
@@ -334,18 +347,81 @@ for j in range(1, jMax_inm):
     X_inm[iMax_inm - 1, j] = x_inm_lower_start + dx_iMax_j * j
     Y_inm[iMax_inm - 1, j] = y_inm_lower_start + dy_iMax_j * j
 
-X = np.stack((X_inm, Y_inm), axis=-1)
+X_inm = np.stack((X_inm, Y_inm), axis=-1)
 
-tfi_linear_2d(X)
+tfi_linear_2d(X_inm)
+plot_block(X_inm)
 
 
-plt.plot(X[:, :, 0], X[:, :, 1], '.r')
+# Block inl
 
-for i in range(X.shape[0]):
-    plt.plot(X[i, :, 0], X[i, :, 1], '-b')
 
-for j in range(X.shape[1]):
-    plt.plot(X[:, j, 0], X[:, j, 1], '-b')
+def uniform_distribution(X):
+    dX = (X[-1] - X[0]) / (X.shape[0] - 1)
+
+    for i in range(1, X.shape[0] - 1):
+        X[i] = X[0] + dX * i
+
+
+X_inl = np.zeros([scut, ncut, 2])
+
+X_inl[:, 0, :] = np.stack(
+    [np.flip(x_blade[-(ninm // 2) - scut:-(ninm // 2)]),
+     np.flip(y_blade[-(ninm // 2) - scut:-(ninm // 2)])], axis=-1)
+X_inl[0, :, :] = X_inm[-1, :, :]
+
+X_inl[-1, -1, :] = np.stack([x_per_lower_0, y_per_lower_0], axis=-1)
+uniform_distribution(X_inl[:, -1, :])
+uniform_distribution(X_inl[-1, :, :])
+
+tfi_linear_2d(X_inl)
+
+plot_block(X_inl)
+
+
+# Block pll1
+
+
+X_pll1 = np.zeros([nbb - ninm - scut + ncut, ncut, 2])
+
+X_pll1[0, :, :] = X_inl[-1, :, :]
+
+X_pll1[:-ncut+1, 0, :] = np.flip(np.stack([x_blade[nbb+ninm//2 - 1:-(ninm // 2) - scut + 1],
+                                           y_blade[nbb+ninm//2 - 1:-
+                                                   (ninm // 2) - scut + 1]
+                                           ], axis=-1), axis=0)
+X_pll1[-1, 0, :] = np.stack([x_exm_lower_end, y_exm_lower_end], axis=-1)
+uniform_distribution(X_pll1[-ncut:, 0, :])
+
+X_pll1[-1, -1, :] = np.stack([x_per_lower_1, y_per_lower_1], axis=-1)
+X_pll1[:, -1, :] = np.transpose(interpolate.splev(
+    np.linspace(0, 1, X_pll1.shape[0]), tck_per, ext=2))
+
+uniform_distribution(X_pll1[-1, :, :])
+
+tfi_linear_2d(X_pll1)
+
+plot_block(X_pll1)
+
+
+# Block exm
+
+
+X_exm = np.zeros([ninm + 1, ncut, 2])
+
+X_exm[0, :, :] = X_pll1[-ncut:, 0, :]
+X_exm[:, 0, :] = np.flip(np.stack(
+    [x_blade[nbb - ninm//2 - 1:nbb + ninm//2],
+     y_blade[nbb - ninm//2 - 1:nbb + ninm//2]], axis=-1), axis=0)
+X_exm[-1, -1, :] = np.stack([x_exm_upper_end, y_exm_upper_end], axis=-1)
+
+uniform_distribution(X_exm[-1, :, :])
+uniform_distribution(X_exm[:, -1, :])
+
+tfi_linear_2d(X_exm)
+
+plot_block(X_exm)
+
 
 plt.minorticks_on()
 plt.grid(b=True, which='major', color='0.65', linestyle='-')
