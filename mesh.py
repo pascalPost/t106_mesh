@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from tfi import tfi_linear_2d
+from smooth import smooth_block
 
 pitch = 88.36 * 1e-3  # m
 
@@ -58,7 +59,7 @@ for i in range(len(u_ps)):
 
 # remove first and last element
 del u_ps[0]
-#del u_ps[-1]
+# del u_ps[-1]
 
 # combined u
 u.extend(u_ps)
@@ -109,7 +110,7 @@ xi, yi = interpolate.splev(np.linspace(0, 1, 10000), tck)
 
 nbb = 60
 ninm = 10
-scut = 10
+scut = 20
 ncut = 10
 
 # helper
@@ -192,8 +193,8 @@ s_ss = np.flip(0.5 + s_ps)
 xc_ps, yc_ps = interpolate.splev(s_ps, tck)
 xc_ss, yc_ss = interpolate.splev(s_ss, tck)
 
-#print(xc_ps, yc_ps)
-#print(xc_ss, yc_ss)
+# print(xc_ps, yc_ps)
+# print(xc_ss, yc_ss)
 
 xc = 0.5 * (xc_ps + xc_ss)
 yc = 0.5 * (yc_ps + yc_ss)
@@ -230,7 +231,7 @@ y_per_lower = np.append(y_per_lower, y_per_lower_1)
 tck_per, u = interpolate.splprep([x_per_lower, y_per_lower], s=0)
 x_per_lower_plot, y_per_lower_plot = interpolate.splev(
     np.linspace(0, 1), tck_per, ext=2)
-#f_per_lower = interpolate.interp1d(x_per_lower, y_per_lower, kind='cubic')
+# f_per_lower = interpolate.interp1d(x_per_lower, y_per_lower, kind='cubic')
 
 # x_per_lower_plot = np.linspace(x_per_lower[0], x_per_lower[-1])
 # y_per_lower_plot = f_per_lower(x_per_lower_plot)
@@ -423,6 +424,128 @@ tfi_linear_2d(X_exm)
 plot_block(X_exm)
 
 
+# Block exh
+
+
+X_exh = np.zeros([scut, ncut, 2])
+
+X_exh[:, 0, :] = np.flip(np.stack(
+    [x_blade[nbb - ninm//2 - scut:nbb - ninm//2],
+     y_blade[nbb - ninm//2 - scut:nbb - ninm//2]], axis=-1), axis=0)
+X_exh[0, :, :] = X_exm[-1, :, :]
+
+X_exh[-1, -1, :] = X_pll1[-1, -1, :] + [0, pitch]
+
+uniform_distribution(X_exh[-1, :, :])
+uniform_distribution(X_exh[:, -1, :])
+
+tfi_linear_2d(X_exh)
+
+plot_block(X_exh)
+
+
+# Block inh
+
+X_inh = np.zeros([X_pll1.shape[0], ncut, 2])
+
+X_inh[:-ncut+1, 0, :] = np.stack(
+    [x_blade[nbb - ninm//2 - scut:ninm//2-1:-1],
+     y_blade[nbb - ninm//2 - scut:ninm//2-1:-1]], axis=-1)
+X_inh[-ncut:, 0, :] = X_inm[0, :, :]
+
+X_inh[0, :, :] = X_exh[-1, :, :]
+
+X_inh[:, -1, :] = X_pll1[::-1, -1, :]
+X_inh[:, -1, 1] = X_inh[:, -1, 1] + pitch
+
+uniform_distribution(X_inh[-1, :, :])
+
+tfi_linear_2d(X_inh)
+
+plot_block(X_inh)
+
+
+# Block ex
+
+
+nex = 20  # TODO can be computed automatically based on the average size
+X_ex = np.zeros([nex, scut+ncut+ninm - 1, 2])
+
+X_ex[0, :, :] = np.concatenate(
+    (X_pll1[-1, ::-1, :], X_exm[1:-1, -1, :], X_exh[:, -1, :]))
+X_ex[-1, 0, :] = [1.175, X_pll1[-1, -1, 1]]
+X_ex[-1, -1, :] = [1.175, X_ex[0, -1, 1]]
+
+uniform_distribution(X_ex[:, 0, :])
+uniform_distribution(X_ex[:, -1, :])
+uniform_distribution(X_ex[-1, :, :])
+
+tfi_linear_2d(X_ex)
+
+plot_block(X_ex)
+
+
+# Block in
+
+
+nin = 20  # TODO can be computed automatically based on the average size
+X_in = np.zeros([nin, scut + ncut+ninm - 1, 2])
+
+X_in[0, 0, :] = [1., X_inh[-1, -1, 1] - pitch]
+X_in[0, -1, :] = [1., X_inh[-1, -1, 1]]
+
+X_in[-1, :, :] = np.concatenate(
+    (X_inl[::-1, -1, :], X_inm[-2:0:-1, -1, :], X_inh[-1, :, :]))
+
+uniform_distribution(X_in[0, :, :])
+uniform_distribution(X_in[:, 0, :])
+uniform_distribution(X_in[:, -1, :])
+
+tfi_linear_2d(X_in)
+
+plot_block(X_in)
+
+
+# plot
+
+plt.minorticks_on()
+plt.grid(b=True, which='major', color='0.65', linestyle='-')
+plt.grid(b=True, which='minor', color='0.65', linestyle='--')
+
+plt.axis('equal')
+plt.show()
+
+# plt.close()
+# plt.cla()
+# plt.clf()
+
+# smoothing
+
+smooth_block(X_inm)
+plot_block(X_inm)
+
+smooth_block(X_inl)
+plot_block(X_inl)
+
+smooth_block(X_pll1)
+plot_block(X_pll1)
+
+smooth_block(X_exm)
+plot_block(X_exm)
+
+smooth_block(X_exh)
+plot_block(X_exh)
+
+smooth_block(X_inh)
+plot_block(X_inh)
+
+smooth_block(X_ex)
+plot_block(X_ex)
+
+smooth_block(X_in)
+plot_block(X_in)
+
+# plot
 plt.minorticks_on()
 plt.grid(b=True, which='major', color='0.65', linestyle='-')
 plt.grid(b=True, which='minor', color='0.65', linestyle='--')
